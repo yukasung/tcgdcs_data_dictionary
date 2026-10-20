@@ -1,0 +1,52 @@
+import DocPage from '../../components/DocPage'
+
+export const metadata = { title: 'กระบวนการทำงาน' }
+
+<DocPage eyebrow="WORKFLOWS / FOLLOW THE DATA" title="ข้อมูลถูกใช้งานอย่างไร" intro="กระบวนการสำคัญที่ตรวจจาก SQL definitions พร้อมจุดเริ่มอ่านต่อ ไม่ได้รัน Stored Procedure เพื่อทดสอบธุรกรรมจริง">
+
+## นำเข้าข้อมูลและสร้างการ์ด
+
+กลุ่ม `SP_INTERFACE_*` มีขั้นตอนนำเข้าลูกหนี้ LG ความสัมพันธ์ การ์ดหลักและการ์ดบุคคล ชื่อลำดับช่วยค้นหา แต่ลำดับการทำงานจริงต้องตรวจจากตัวเรียกหรือ scheduler
+
+- [SP_INTERFACE_011_InsertDebtor](/modules/dbo.SP_INTERFACE_011_InsertDebtor/)
+- [SP_INTERFACE_026_InsertDebtorRelate](/modules/dbo.SP_INTERFACE_026_InsertDebtorRelate/)
+- [SP_INTERFACE_027_InsertDataMainCard](/modules/dbo.SP_INTERFACE_027_InsertDataMainCard/)
+- [SP_INTERFACE_029_InsertDataDebtorCard](/modules/dbo.SP_INTERFACE_029_InsertDataDebtorCard/)
+
+## รับชำระและเชื่อมใบเสร็จ
+
+ตารางหลักคือ [DataEStatement](/tables/dbo.DataEStatement/), [DEBDataBillPayment](/tables/dbo.DEBDataBillPayment/), [ACCDataReceipt](/tables/dbo.ACCDataReceipt/) และ [Output_eStatementReceipt](/tables/dbo.Output_eStatementReceipt/)
+
+[SP_ACC_003_eStatementReceipt](/modules/dbo.SP_ACC_003_eStatementReceipt/) ตรวจ `ReceiptNo` และหา `EStatementId` ก่อน UPDATE หรือ INSERT ใน `Output_eStatementReceipt` ภายใน transaction โค้ดมีแนวทางรองรับการเรียกซ้ำ แต่การอ่านขั้นตอนนี้เพียงตัวเดียวไม่ยืนยันวงจรบัญชีทั้งหมด
+
+## คำนวณดอกเบี้ยและอัปเดตการ์ด
+
+[SP_DCS_Card_002_UpdateInterestEveryDay](/modules/dbo.SP_DCS_Card_002_UpdateInterestEveryDay/) แก้ไขข้อมูล Card/Movement และเรียกขั้นตอน DPD, history และ Horizontal variant
+
+<div className="note">ใน snapshot นี้ ค่าเริ่มต้น <code>@CurrentDate</code> ของ procedure ข้างต้นคือ <code>2026-08-31</code> เอกสารนี้อ่านโค้ดเท่านั้น หากนำไปใช้งานต้องตรวจพารามิเตอร์วันที่และขอบเขตให้ตรงกับงานจริง</div>
+
+## ปรับโครงสร้างหนี้ (TDR)
+
+[DEBDataDebtRequest](/tables/dbo.DEBDataDebtRequest/) เชื่อมไปยัง [TDRDataCompromiseContract](/tables/dbo.TDRDataCompromiseContract/) และตาราง LG แผนผ่อนชำระ ใบเสร็จและการอนุมัติที่เกี่ยวข้อง
+
+[SP_TDR_Approval_ProcessRecal](/modules/dbo.SP_TDR_Approval_ProcessRecal/) อ่านใบเสร็จ ความสัมพันธ์ลูกหนี้ การ์ด และสัญญา ก่อนเรียกขั้นตอนสร้างแผนรับชำระและรายการเคลื่อนไหวจากการคำนวณใหม่
+
+## คดีและค่าใช้จ่าย
+
+[LTDataCaseMain](/tables/dbo.LTDataCaseMain/) เป็นข้อมูลคดี เชื่อมผู้รับผิดชอบ ประเภทคดีและสถานะ ตารางกลุ่ม `LTDataCaseMainDebtor`, `LTDataTransactionCaseActivity` และ `LTDataCaseExpense` แยกข้อมูลลูกหนี้ กิจกรรมและค่าใช้จ่าย
+
+## Snapshot สิ้นวัน
+
+[eod.SP_EOD_InsertDailySnapshot](/modules/eod.SP_EOD_InsertDailySnapshot/) รวมข้อมูลการ์ด Movement ผู้รับผิดชอบ สถานะ คดี และ TDR เพื่อสร้าง snapshot และรองรับการลบ snapshot เดิมเมื่อ overwrite
+
+ขั้นตอนนี้ใช้ [eod.DataEndOfDay](/tables/eod.DataEndOfDay/) ขณะที่โค้ดรายงาน NCB ที่ตรวจพบอ่าน [dbo.DataEndOfDay](/tables/dbo.DataEndOfDay/) จึงต้องตรวจเส้นทางเตรียมข้อมูลเพิ่มเติมก่อนสรุปว่าเป็น pipeline เดียวกัน
+
+## รายงาน NCB
+
+[ncb_internal.SP_RP_NCB_05_ConsumerDataField_Insert_Core](/modules/ncb_internal.SP_RP_NCB_05_ConsumerDataField_Insert_Core/) ตรวจช่วงรายงานให้อยู่ภายในหนึ่งเดือน อ่านกฎสถานะ DPD รหัส TDR และข้อมูลลูกหนี้ การ์ด คดีและ snapshot
+
+ผลรายงานใน `ncb_internal` มี Views สำหรับรูปแบบ PDF ได้แก่ [PdfConsumerRows](/modules/ncb_internal.PdfConsumerRows/), [PdfCreditRows](/modules/ncb_internal.PdfCreditRows/) และ [PdfProfileRows](/modules/ncb_internal.PdfProfileRows/)
+
+กฎความหมายของรหัสสถานะต้องตรวจค่า master ที่ใช้งานจริงเพิ่มเติม เพราะ snapshot ชุดนี้มีโครงสร้างและโค้ด แต่ไม่มีแถวข้อมูล master
+
+</DocPage>

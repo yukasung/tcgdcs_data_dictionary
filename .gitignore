@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+public/_pagefind/
+data/generated/
+*.log
+
+.pnpm-store/
+.next-dev/
+.next-html/

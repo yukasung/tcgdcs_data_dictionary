@@ -1,0 +1,28 @@
+{
+    "name":  "db-tcgdcs-docs",
+    "version":  "1.0.0",
+    "private":  true,
+    "scripts":  {
+                    "prepare:data":  "node scripts/prepare-data.mjs",
+                    "dev":  "node scripts/prepare-data.mjs \u0026\u0026 next dev --hostname 127.0.0.1",
+                    "build":  "node scripts/prepare-data.mjs \u0026\u0026 next build \u0026\u0026 node scripts/postbuild.mjs",
+                    "build:html":  "node scripts/build-html.mjs",
+                    "start":  "next start --hostname 127.0.0.1",
+                    "start:standalone":  "node scripts/start-standalone.mjs",
+                    "check":  "node scripts/check-data.mjs"
+                },
+    "dependencies":  {
+                         "next":  "15.5.28",
+                         "nextra":  "4.6.1",
+                         "nextra-theme-docs":  "4.6.1",
+                         "react":  "^19.2.0",
+                         "react-dom":  "^19.2.0"
+                     },
+    "devDependencies":  {
+                            "pagefind":  "^1.4.0"
+                        },
+    "engines":  {
+                    "node":  "\u003e=22"
+                },
+    "packageManager":  "pnpm@11.25.0"
+}

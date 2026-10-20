@@ -1,0 +1,48 @@
+{
+  "standalone": [
+    {
+      "route": "/",
+      "status": 200
+    },
+    {
+      "route": "/architecture/",
+      "status": 200
+    },
+    {
+      "route": "/workflows/",
+      "status": 200
+    },
+    {
+      "route": "/tables/",
+      "status": 200
+    },
+    {
+      "route": "/tables/dbo.DataDebtor/",
+      "status": 200
+    },
+    {
+      "route": "/tables/dbo.DataDebtorCard/",
+      "status": 200
+    },
+    {
+      "route": "/tables/eod.DataEndOfDay/",
+      "status": 200
+    },
+    {
+      "route": "/modules/",
+      "status": 200
+    },
+    {
+      "route": "/modules/dbo.SP_ACC_003_eStatementReceipt/",
+      "status": 200
+    },
+    {
+      "route": "/_pagefind/pagefind.js",
+      "status": 200
+    },
+    {
+      "route": "/tables/does-not-exist/",
+      "status": 404
+    }
+  ]
+}

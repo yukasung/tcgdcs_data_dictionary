@@ -1,0 +1,13 @@
+'use client'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+export default function Explorer({ rows, domains, kind = 'tables' }) {
+  const [query,setQuery]=useState('')
+  const [filter,setFilter]=useState('')
+  const [page,setPage]=useState(1)
+  useEffect(()=>{const sync=()=>{const value=window.location.hash.slice(1);if(kind==='tables' && domains[value]){setFilter(value);setPage(1)}};sync();window.addEventListener('hashchange',sync);return ()=>window.removeEventListener('hashchange',sync)},[domains,kind])
+  const filtered=useMemo(()=>rows.filter(r => (!filter || (kind==='tables'?r.domain:r.type)===filter) && `${r.id} ${r.description||''}`.toLowerCase().includes(query.toLowerCase())),[rows,query,filter,kind])
+  const size=35, pages=Math.max(1,Math.ceil(filtered.length/size)), current=Math.min(page,pages)
+  const choices=kind==='tables'?Object.entries(domains).map(([key,value])=>[key,value[0]]):[['SQL_STORED_PROCEDURE','Stored Procedures'],['SQL_SCALAR_FUNCTION','Functions'],['VIEW','Views']]
+  return <section className="explorer"><div className="filter-bar"><label><span className="sr-only">ค้นหาชื่อหรือคำอธิบาย</span><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}} placeholder="ค้นหาชื่อ ตาราง หรือคำอธิบาย…" /></label><label><span className="sr-only">หมวดงาน</span><select value={filter} onChange={e=>{setFilter(e.target.value);setPage(1)}}><option value="">ทุกหมวด</option>{choices.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label></div><p className="muted" role="status">พบ {filtered.length.toLocaleString()} รายการ · หน้า {current} / {pages}</p><div className="object-list">{filtered.slice((current-1)*size,current*size).map(r=><Link className="object-row" href={`/${kind}/${encodeURIComponent(r.id)}/`} key={r.id} prefetch={false}><div><span className="schema-label">{r.schema}</span><strong>{r.name}</strong><p>{r.description || (kind==='tables'?domains[r.domain][1]:r.type.replaceAll('_',' '))}</p></div><div className="row-meta">{kind==='tables'?<><span>{r.columnCount} columns</span><small>{r.pk.length?'PK · '+r.pk.join(', '):'ไม่พบ Primary Key'}</small></>:<span>{r.type==='VIEW'?'VIEW':r.type.includes('FUNCTION')?'FUNCTION':'PROCEDURE'}</span>}<b aria-hidden="true">↗</b></div></Link>)}</div>{!filtered.length&&<p className="note">ไม่พบรายการที่ตรงกับคำค้น ลองค้นด้วยส่วนหนึ่งของชื่อหรือเลือกทุกหมวด</p>}<div className="pagination"><button disabled={current===1} onClick={()=>setPage(current-1)}>← ก่อนหน้า</button><span>{current} / {pages}</span><button disabled={current===pages} onClick={()=>setPage(current+1)}>ถัดไป →</button></div></section>
+}

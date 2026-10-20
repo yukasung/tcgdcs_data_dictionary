@@ -1,0 +1,17 @@
+import DocPage from '../components/DocPage'
+import { readIndex } from '../lib/schema'
+import Link from 'next/link'
+
+export const metadata = { title: 'เริ่มต้นอ่าน' }
+
+<DocPage eyebrow="DATABASE KNOWLEDGE BASE / UAT" title="เข้าใจ DB_TCGDCS ทีละส่วน" intro="จากภาพรวมงานลูกหนี้ ไปจนถึงคอลัมน์และโค้ด SQL ที่ขับเคลื่อนระบบ เอกสารชุดนี้เชื่อมโครงสร้างจริงเข้ากับกระบวนการหลักเพื่อให้ค้นหาและอ่านต่อได้สะดวก">
+  <div className="stat-grid"><div><strong>437</strong>ตารางใน 3 schemas</div><div><strong>9,355</strong>คอลัมน์พร้อมชนิดข้อมูล</div><div><strong>651</strong>SQL Modules</div></div>
+  <div className="note"><b>แหล่งข้อมูล:</b> DCS-UAT-DATABAS / DB_TCGDCS · Snapshot 20 ตุลาคม 2026<br />ครอบคลุมโครงสร้างที่ส่งออกและ SQL definitions ส่วนความหมายธุรกิจที่ยังไม่มีหลักฐานจะระบุไว้ตามขอบเขต</div>
+  <h2 id="start">เริ่มอ่านจากตรงไหน</h2>
+  <div className="reading-steps"><div><strong>01 · เข้าใจแกนข้อมูล</strong><p>ลูกหนี้ LG ความสัมพันธ์ การ์ดหนี้ และรายการเคลื่อนไหว เชื่อมกันอย่างไร</p><Link href="/architecture/">ดูโครงสร้างและความสัมพันธ์ →</Link></div><div><strong>02 · ไล่ตามกระบวนการ</strong><p>รับชำระ ปรับโครงสร้างหนี้ คดี และรายงาน NCB ใช้ข้อมูลส่วนไหน</p><Link href="/workflows/">อ่านกระบวนการทำงาน →</Link></div><div><strong>03 · เปิดรายละเอียดที่ต้องใช้</strong><p>ค้นหาตาราง ดูคอลัมน์ คีย์ ดัชนี และเปิด SQL module ที่อ้างถึงตารางนั้น</p><Link href="/tables/">เปิดพจนานุกรมตาราง →</Link></div></div>
+  <h2 id="domains">สำรวจตามหมวดงาน</h2>
+  <div className="domain-grid">{Object.entries(readIndex().domains).map(([id, [title, description]], n) => <Link href={`/tables/#${id}`} className="domain-card" key={id}><span className="number">{String(n+1).padStart(2,'0')} / {readIndex().tables.filter(t=>t.domain===id).length} TABLES</span><strong>{title}</strong><p>{description}</p></Link>)}</div>
+  <h2 id="quick">ตารางหลักที่ใช้เป็นจุดเริ่มต้น</h2>
+  <div className="flow"><Link href="/tables/dbo.DataDebtor/">DataDebtor<small>ตัวตนลูกหนี้</small></Link><span className="arrow">→</span><Link href="/tables/dbo.DataDebtorRelate/">DataDebtorRelate<small>บทบาทลูกหนี้ต่อ LG</small></Link><span className="arrow">→</span><Link href="/tables/dbo.DataDebtorCard/">DataDebtorCard<small>การ์ดหนี้รายบุคคล</small></Link><span className="arrow">→</span><Link href="/tables/dbo.DataDebtorCardMovement/">DataDebtorCardMovement<small>รายการเคลื่อนไหว</small></Link></div>
+  <p className="muted">ลูกศรข้างต้นแสดงลำดับการอ่านข้อมูล ไม่ใช่ทิศทางการไหลของเงิน ดูทิศทาง Foreign Key จริงได้ในหน้าความสัมพันธ์</p>
+</DocPage>
