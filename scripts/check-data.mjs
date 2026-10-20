@@ -14,7 +14,7 @@ console.log(`Validated ${i.tables.length} tables, ${i.counts.columns} columns an
 const moduleIds = new Set(i.modules.map(m=>m.id));
 for (const file of fs.readdirSync('app', {recursive:true}).filter(x=>x.endsWith('.mdx'))) {
   const text=fs.readFileSync(`app/${file}`,'utf8');
-  for(const match of text.matchAll(/\/(tables|modules)\/([^/"\s)]+)\//g)) {
+  for(const match of text.matchAll(/\/(tables|modules)\/([A-Za-z0-9_.%\-]+)\//g)) {
     const target=decodeURIComponent(match[2]);
     assert((match[1]==='tables'?ids:moduleIds).has(target),`${file}: missing ${target}`);
   }

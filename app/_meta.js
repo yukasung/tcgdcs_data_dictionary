@@ -1,7 +1,8 @@
 export default {
-  index: { title: 'เริ่มต้นอ่าน', theme: { toc: false } },
+  index: { title: 'Overview' },
   architecture: 'โครงสร้างและความสัมพันธ์',
   workflows: 'กระบวนการทำงาน',
+  _reference: { type: 'separator', title: 'Reference' },
   tables: { title: 'พจนานุกรมตาราง', theme: { toc: false } },
   modules: { title: 'SQL Modules', theme: { toc: false } },
   notes: 'ข้อสังเกตและขอบเขต'

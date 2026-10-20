@@ -82,3 +82,7 @@ pnpm build
 ใช้ Next.js 15.5.28 และ Nextra 4.6.1 พร้อม pin Zod 4.1.12 ผ่าน `pnpm-workspace.yaml` เนื่องจาก Zod รุ่นใหม่เปลี่ยนการตรวจ optional fields ของ theme configuration ควรติดตั้งจาก lockfile ก่อนอัปเดต dependencies
 
 เมื่อ build แล้ว บน Windows สามารถเปิด `Start-Docs.cmd` แล้วไปที่ http://127.0.0.1:3000 ได้ ตัว launcher จะใช้ Node.js บน PATH หรือ bundled runtime ของ Codex ถ้ามีอยู่
+
+## Frontend
+
+รูปแบบหน้าจอใช้แนวทางเดียวกับ `yukasung/mattersolv_docs`: Nextra 4.6.1 พร้อม navbar ตัวอักษรเรียบ, typography และ sidebar มาตรฐาน, สารบัญหน้า, ธีมน้ำเงิน, หน้าคู่มือแบบเอกสาร และแผงตัวกรองรายการ รองรับ light/dark mode โดยรายละเอียดที่มาอยู่ใน `THIRD_PARTY_NOTICES.md`
