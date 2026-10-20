@@ -19,6 +19,8 @@ export const metadata = { title: 'กระบวนการทำงาน' }
 
 [SP_ACC_003_eStatementReceipt](/modules/dbo.SP_ACC_003_eStatementReceipt/) ตรวจ `ReceiptNo` และหา `EStatementId` ก่อน UPDATE หรือ INSERT ใน `Output_eStatementReceipt` ภายใน transaction โค้ดมีแนวทางรองรับการเรียกซ้ำ แต่การอ่านขั้นตอนนี้เพียงตัวเดียวไม่ยืนยันวงจรบัญชีทั้งหมด
 
+อ่านรายละเอียด **[e-Statement — กรณีรับชำระแล้วและออกใบเสร็จ](/e-statement-receipt/)** สำหรับเส้นทางข้อมูล ที่มาครบ 22 fields ของ Transaction_Receipt และผลตรวจ Store ฉบับแก้ไข v2 บน UAT โดยแยกจาก SQL snapshot เดิม
+
 ## คำนวณดอกเบี้ยและอัปเดตการ์ด
 
 [SP_DCS_Card_002_UpdateInterestEveryDay](/modules/dbo.SP_DCS_Card_002_UpdateInterestEveryDay/) แก้ไขข้อมูล Card/Movement และเรียกขั้นตอน DPD, history และ Horizontal variant

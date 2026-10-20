@@ -1,0 +1,158 @@
+import DocPage from '../../components/DocPage'
+
+export const metadata = { title: 'e-Statement — รับชำระแล้วและออกใบเสร็จ' }
+
+<DocPage title="e-Statement — รับชำระแล้วและออกใบเสร็จ" intro="ที่มาของข้อมูล Transaction_Receipt ตั้งแต่รับชำระ สร้างใบเสร็จใน DCS จนถึงเตรียมข้อมูลส่งกลับให้ e-Statement ผ่าน SP_ACC_003_eStatementReceipt">
+
+## ขอบเขตและเวอร์ชัน
+
+หน้านี้อธิบาย **กรณีรับชำระแล้วและออกใบเสร็จปกติ** โดยใช้ข้อกำหนดจากไฟล์ `Interface List.xlsx` ชีต `Output_Estatement (Finalize)` ส่วน `Transaction_Receipt` ช่วง `A7:V10` ซึ่งกำหนด Output 22 fields
+
+คำอธิบายการจับคู่และการเรียกซ้ำด้านล่างอ้างอิง **Store ฉบับแก้ไข v2 ที่ตรวจพบบน UAT เมื่อ 20 ตุลาคม 2026** ส่วนหน้า [SQL Definition ของ SP_ACC_003](/modules/dbo.SP_ACC_003_eStatementReceipt/) แสดงโค้ดจาก schema snapshot เดิม จึงอาจไม่ตรงกับ Store ฉบับแก้ไข ก่อนนำ SQL ไปใช้ให้ตรวจ definition ในฐานข้อมูลเป้าหมาย
+
+Excel ส่วนนี้ระบุชื่อ field ชนิดข้อมูล และความหมายของ `Status` กับ `TransStatus` แต่ไม่ได้ระบุแหล่งข้อมูล ค่า default และรูปแบบวันที่ครบทุก field การตรงกับพฤติกรรม Store จึงยังไม่เท่ากับได้รับการยืนยันจากระบบปลายทาง
+
+## เส้นทางของข้อมูล
+
+```text
+e-Statement ส่งรายการรับชำระเข้ามา
+  TEMPEStatement
+       │ SP_INTERFACE_015_InsertEStatement
+       ▼
+  DataEStatement ──────────────┐
+       │ ใช้ประกอบการรับชำระ  │ Mapping ID / Bill Payment / ธนาคาร
+       ▼                      │
+  SP_DCS_039_InsertReceipt     │
+       │ สร้างใบเสร็จจริง     │
+       ▼                      │
+  ACCDataReceipt              │
+       │ เลขใบเสร็จ / ยอด / วันใบเสร็จ / LG
+       └──────────┬───────────┘
+                  ▼
+  SP_ACC_003_eStatementReceipt
+       │ ตรวจความสัมพันธ์และรายการเดิม
+       ▼
+  Output_eStatementReceipt
+       │ ข้อมูลเตรียมส่ง Transaction_Receipt
+       ▼
+  งานส่งออกของระบบ → e-Statement
+```
+
+[SP_DCS_039](/modules/dbo.SP_DCS_039_InsertReceipt/) เรียก Store ส่งออกหลังสร้างใบเสร็จ ส่วน [SP_INTERFACE_015](/modules/dbo.SP_INTERFACE_015_InsertEStatement/) มีขั้นตอน reconciliation เพื่อเรียกเตรียม Output จากใบเสร็จที่มีอยู่แล้วด้วย ไม่ใช่ว่าต้องออกใบเสร็จใหม่ทุกครั้งที่เรียก SP_ACC_003
+
+Store นี้เขียนตาราง Output แต่ไม่ได้สร้างไฟล์หรือส่งข้อมูลไปยังระบบภายนอกด้วยตัวเอง ต้องตรวจตัว export/JobService แยกเพื่อยืนยันลำดับคอลัมน์ การแปลงชนิดข้อมูล และรูปแบบไฟล์จริง
+
+## รหัสที่ต้องแยกให้ออก
+
+| รหัส | ความหมายและที่มา |
+| --- | --- |
+| `DataEStatement.EStatementId` | รหัสแถว statement ภายใน DCS ใช้เชื่อม `ACCDataReceipt.eStatementId` |
+| `DataEStatement.ReceiptId` | ในเส้นทางนำเข้า SP_INTERFACE_015 เก็บค่าจาก `TEMPEStatement.MappingReceiptId` |
+| `ACCDataReceipt.ReceiptId` | รหัสใบเสร็จภายใน DCS ที่สร้างด้วย NEWID() ใน SP_DCS_039 |
+| `ReceiptNo` | เลขใบเสร็จที่ใช้อ้างอิงเอกสารจริง |
+| `DataEStatement.StatementNo` | รับจาก `TEMPEStatement.BillPaymentNo` โดย Store นำเข้าใช้ LEFT(..., 30) |
+
+**ReceiptId ของสองตารางไม่จำเป็นต้องเป็นรหัสเดียวกัน** อย่านำ ID ใบเสร็จ DCS มาแทน MappingReceiptId โดยไม่มีหลักฐานความสัมพันธ์ ข้อมูลบางเส้นทางเก่าใช้ ReceiptId เชื่อมกัน จึงรองรับเป็น fallback เฉพาะกรณีที่ไม่มี eStatementId บนใบเสร็จ
+
+## Store v2 เลือกใบเสร็จอย่างไร
+
+เริ่มจาก `@ReceiptNo` ที่ไม่ว่าง และเลือกรายการที่ใบเสร็จไม่ยกเลิก (`IsCancel` ไม่เป็น 1) กับ statement ที่ไม่ถูกลบ (`IsDelete` ไม่เป็น 1) หากส่ง `@InputEStatementId` มาจะใช้จำกัด statement ด้วย
+
+ลำดับความน่าเชื่อถือของการจับคู่คือ:
+
+1. `ACCDataReceipt.eStatementId = DataEStatement.EStatementId`
+2. เมื่อ eStatementId บนใบเสร็จว่างเท่านั้น ใช้ `ACCDataReceipt.ReceiptId = DataEStatement.ReceiptId`
+3. เมื่อ eStatementId บนใบเสร็จว่างเท่านั้น ใช้เลขใบเสร็จและ LG ที่ตรงกัน โดย LG บนใบเสร็จต้องไม่ว่าง
+
+เลือกเฉพาะกลุ่มที่มีลำดับดีที่สุด หากยังได้มากกว่าหนึ่งคู่จะหยุดด้วย error ไม่ใช้ TOP (1) เลือกโดยไม่มีหลักฐาน หาก eStatementId บนใบเสร็จมีค่าแต่ผิด จะไม่ข้ามไปจับคู่แบบอ่อนกว่า
+
+## ที่มาของ Output ครบ 22 fields
+
+ตารางนี้แสดงพฤติกรรม **v2** ไม่ใช่การยืนยันว่าค่า default ทุกตัวได้รับอนุมัติจากปลายทางแล้ว
+
+| Field ใน Transaction_Receipt | แหล่งข้อมูล/ค่าที่ Store ใช้ | จุดที่ต้องเข้าใจ |
+| --- | --- | --- |
+| `MappingReceiptId` | `DataEStatement.ReceiptId` | ตัดช่องว่างหัวท้าย ต้องไม่ว่าง ไม่ fallback เป็น ID ใบเสร็จ DCS |
+| `BillPaymentNo` | `DataEStatement.StatementNo` | ตัดช่องว่างหัวท้าย ต้องไม่ว่าง; ข้อมูลอาจถูกตัดเหลือ 30 ตัวตั้งแต่ขั้นนำเข้า |
+| `No` | ค่าว่างตอน INSERT/UPDATE | Store ไม่สร้างเลขลำดับ ต้องยืนยันว่าปลายทางยอมรับค่าว่าง |
+| `ReceiptNo` | parameter `@ReceiptNo` ที่ตรวจพบใบเสร็จจริงแล้ว | ต้องสัมพันธ์กับ statement ที่เลือก |
+| `RequestNo` | `@RequestNo` ค่าเริ่มต้นว่าง | ไม่ดึงจากตารางอื่นโดยอัตโนมัติ |
+| `LGNo` | `ACCDataReceipt.LGNo` | ใช้ LG ของใบเสร็จจริง ไม่ใช้ parameter แทน; ว่างได้ถ้าต้นทางว่าง |
+| `ReceiptAmount` | `ACCDataReceipt.PaymentAmount` แปลงเป็น decimal(18,2) | ไม่ fallback เป็นยอด statement เมื่อ parameter เป็น 0 |
+| `ReceiptDate` | `ACCDataReceipt.ReceiptDate` | วันใบเสร็จจริง ไม่ fallback เป็นวันชำระ; ต้องไม่เป็น NULL |
+| `ReceiptType` | `@ReceiptType` ค่าเริ่มต้นว่าง | ยังไม่มี mapping ที่ยืนยันกับรหัสประเภทใน DCS |
+| `StatusReceipt` | `@StatusReceipt` ว่าง/NULL ใช้ `'1'` | ไม่ได้อ่าน PaymentTypeId หรือสถานะยกเลิกมาเป็นรหัสประเภท |
+| `CheckDate` | ReceiptDate บวก 543 ปี | คงสูตรเดิมไว้ ต้องยืนยันวันรับชำระเทียบกับวันใบเสร็จและรูปแบบปี |
+| `PaymentDes2` | ReceiptDate บวก 543 ปี | `@PaymentDes2` ไม่ได้นำมาใช้; Excel ระบุเป็น varchar แต่ตารางเป็น datetime |
+| `StatusES` | `@StatusES` ว่าง/NULL ใช้ `'1'` | ยังต้องยืนยันกับปลายทาง; คำอธิบายคอลัมน์ใน snapshot เดิมระบุ DCS ส่งว่าง |
+| `CreateUser` | `@CreateUser` ตอน INSERT ค่าเริ่มต้นว่าง | caller ภายในบางตัวส่ง CreateBy เป็นข้อความ; เรียกเองด้วยสอง parameter จะไม่เติม CreateBy ให้; UPDATE รักษาค่าเดิม |
+| `Type1` | ค่าว่างตอน INSERT | UPDATE รักษาค่าเดิม; คำอธิบายคอลัมน์ระบุ DCS ไม่ใช้ |
+| `Type2` | ค่าว่างตอน INSERT | UPDATE รักษาค่าเดิม; คำอธิบายคอลัมน์ระบุ DCS ไม่ใช้ |
+| `BankCode` | `DataEStatement.BankCode` | ตัดช่องว่างหัวท้าย; ว่างได้ถ้าต้นทางว่าง |
+| `TanReceiptNo` | `@TanReceiptNo` ค่าเริ่มต้นว่าง | ไม่ค้นเอกสารอื่นมาทดแทน |
+| `Status` | `'1'` | รับชำระ/ใบเสร็จปกติ; Excel ระบุ `'2'` เป็นใบเสร็จยกเลิก ซึ่งอยู่นอกกรณีนี้ |
+| `TransStatus` | `@TransStatus` ว่าง/NULL ใช้ `'01'` | Excel: 01 ส่งใหม่, 02 รับแล้ว, 03 Mapping สำเร็จ; v2 ไม่ใช้ retry ปกติไปทับแถวที่ตอบรับแล้ว |
+| `CreateDate` | `@CreateDate` หรือ GETDATE() ตอน INSERT | วันสร้าง Output; UPDATE รักษาค่าเดิม ไม่จำเป็นต้องตรงกับวันสร้างใบเสร็จ |
+| `UpdateDate` | `@UpdateDate` หรือ GETDATE() เมื่อมี INSERT/UPDATE | retry ที่ข้อมูลเหมือนเดิมไม่เปลี่ยนวันที่ |
+
+ตาราง Output มีอีก 4 คอลัมน์ภายในที่ไม่อยู่ใน Excel 22 fields: `eStatementReceiptId` สร้างด้วย NEWID(), `EStatementId` ใช้รหัส statement ที่จับคู่แล้ว, `IsUpdateCard` ตั้ง 0 ตอน INSERT และ `InformPaymentNo` ใส่ว่างตอน INSERT การ UPDATE ใน v2 รักษาสองคอลัมน์หลังไว้
+
+อ่านโครงสร้าง: [ACCDataReceipt](/tables/dbo.ACCDataReceipt/), [DataEStatement](/tables/dbo.DataEStatement/), [TEMPEStatement](/tables/dbo.TEMPEStatement/), [Output_eStatementReceipt](/tables/dbo.Output_eStatementReceipt/)
+
+## INSERT, UPDATE และการเรียกซ้ำ
+
+- ยังไม่มี Output ของใบเสร็จ → INSERT ข้อมูลใหม่
+- มีแถวเดิมและข้อมูลหลักที่ Store เปรียบเทียบเหมือนเดิม → จบโดยไม่เปลี่ยนแถวหรือ UpdateDate
+- มีแถวที่ยังไม่ตอบรับและข้อมูลเปลี่ยน → UPDATE แถวเดิม โดยไม่รีเซ็ตสถานะปรับปรุงการ์ดหรือเลขใบแจ้ง
+- มีแถวสถานะตอบรับ `02`/`03` และข้อมูลที่เปรียบเทียบเปลี่ยน → แจ้ง error เพื่อให้เข้ากระบวนการแก้ไขที่ตกลงกับปลายทาง
+- พบ Output ปกติหลายแถวของเลขใบเสร็จเดียวกัน หรือแถวเดิมผูกคนละ statement → แจ้ง error ไม่สร้างซ้ำหรือย้ายการผูกเงียบ ๆ
+
+v2 ใช้ transaction และล็อกระหว่างตรวจ/เขียนเพื่อป้องกันการเรียก Store นี้พร้อมกัน ส่วนโปรแกรมอื่นที่เขียนตารางโดยตรงยังต้องตรวจแยก จำนวนแถวที่ไม่เพิ่มหลัง EXEC อาจเกิดจาก UPDATE หรือการเรียกซ้ำที่ไม่มีข้อมูลเปลี่ยน จึงต้องตรวจค่าก่อนและหลังร่วมด้วย
+
+## วิธีตรวจว่าดึงข้อมูลถูกต้อง
+
+การ EXEC สำเร็จอย่างเดียวไม่พอ ต้องเทียบ Output กับต้นทางที่จับคู่ได้เพียงหนึ่งรายการ โดยตรวจยอด วันใบเสร็จ LG เลขใบเสร็จ Mapping ID เลข statement และธนาคารตามตารางข้างต้น
+
+```sql
+-- อ่านอย่างเดียว: แทนค่าด้วยเลขใบเสร็จที่ต้องการตรวจ
+DECLARE @ReceiptNo nvarchar(150) = N'เลขใบเสร็จจริง';
+
+SELECT ReceiptId, ReceiptNo, eStatementId, PaymentAmount,
+       ReceiptDate, LGNo, IsCancel, CreateBy
+FROM dbo.ACCDataReceipt
+WHERE ReceiptNo = @ReceiptNo;
+
+SELECT o.MappingReceiptId, d.ReceiptId AS SourceMappingReceiptId,
+       o.BillPaymentNo, d.StatementNo AS SourceBillPaymentNo,
+       o.ReceiptNo, o.LGNo, o.ReceiptAmount, o.ReceiptDate,
+       o.BankCode, d.BankCode AS SourceBankCode,
+       o.Status, o.TransStatus, o.CreateDate, o.UpdateDate,
+       o.EStatementId
+FROM dbo.Output_eStatementReceipt o
+LEFT JOIN dbo.DataEStatement d ON d.EStatementId = o.EStatementId
+WHERE o.ReceiptNo = @ReceiptNo;
+```
+
+ไม่ควรเทียบยอดใบเสร็จกับ DataEStatement.Amount เพียงอย่างเดียว เพราะความหมายของยอด statement กับยอดใบเสร็จอาจต่างกัน เช่นเดียวกับ PaymentDate และ ReceiptDate ซึ่งต้องแยกความหมาย
+
+## ผลตรวจ UAT และขอบเขตที่พิสูจน์แล้ว
+
+เมื่อ 20 ตุลาคม 2026 ตรวจพบ Store v2 บน `DCS-UAT-DATABAS / DB_TCGDCS` ทดสอบ EXEC สองครั้งกับใบเสร็จจริงภายใน transaction ผลคือพบ Output ปกติหนึ่งแถว ข้อมูลหลักตรงต้นทาง และ retry ไม่เปลี่ยนหรือสร้างซ้ำ จากนั้น ROLLBACK สำเร็จ
+
+รายการที่ใช้ทดสอบมี Output อยู่ก่อนแล้ว จึง **ยังไม่ใช่หลักฐานยืนยันเส้นทาง INSERT ใหม่** ต่อมาทดลองเลือกใบเสร็จที่ผูก statement โดยตรงและยังไม่มี Output เพื่อ COMMIT จริง แต่ไม่พบรายการที่ผ่านเกณฑ์ครบ จึงหยุดและ ROLLBACK โดยไม่มีการเพิ่มข้อมูลถาวร
+
+การตรวจภาพรวมในรอบเดียวกันพบ 2,614 แถว ไม่พบ Output ปกติที่เลขใบเสร็จซ้ำ ไม่พบ MappingReceiptId/BillPaymentNo ว่าง และไม่พบ Status/TransStatus นอกรหัสที่กำหนด ตัวเลขนี้เป็นผลตรวจ ณ เวลานั้น ไม่ใช่ข้อมูลสด และไม่ได้ยืนยันว่ายอดกับวันที่ตรงต้นทางครบทั้งตาราง
+
+การพิสูจน์ INSERT ควรทำด้วยข้อมูลทดสอบที่มีต้นทางครบและยังไม่มี Output ใน UAT หรือฐานข้อมูลสำเนาสำหรับทดสอบ แล้วเทียบค่าทั้งหมดก่อนตัดสินใจ COMMIT การลบ Output เดิมชั่วคราวเพื่อบังคับ INSERT เป็นเพียงแนวทางที่เสนอ ยังไม่ได้ดำเนินการ
+
+## เรื่องที่ยังต้องยืนยันกับระบบปลายทาง
+
+- รูปแบบของ CheckDate/PaymentDes2: ใช้วันชำระหรือวันใบเสร็จ รูปแบบข้อความ และปี พ.ศ./ค.ศ. Store ยังใช้สูตรเดิมบวก 543 ปี
+- ค่าและความจำเป็นของ No, ReceiptType, StatusReceipt, StatusES, CreateUser และช่อง optional อื่น ๆ การมีคอลัมน์ใน Excel ไม่ได้ยืนยันว่าเป็นช่องบังคับทั้งหมด
+- ขนาด field: Excel กำหนดข้อความหลายตัว 200 ตัวอักษร แต่ Output เก็บ 50, 10 หรือ 2 ตัวตามคอลัมน์ v2 แจ้ง error เมื่อค่าล้น ไม่ตัดให้ผ่าน
+- การจัดการข้อมูลเก่าที่ไม่มีหลักฐานจับคู่หรือมีหลายคู่ รวมถึงรายการที่ตอบรับแล้วแต่ต้องแก้ไข
+- รูปแบบไฟล์และผลตอบรับจริงของงานส่งออก ต้องตรวจที่โปรแกรมส่งออกเพิ่มเติม
+
+กรณียกเลิกใบเสร็จใช้ [SP_ACC_005_eStatementReceipt_Cancel](/modules/dbo.SP_ACC_005_eStatementReceipt_Cancel/) และต้องวิเคราะห์ความสัมพันธ์กับข้อมูลนำเข้าแยกจากใบเสร็จปกติ ไม่ควรเปลี่ยน Status ของกรณีนี้เป็น 2 เพื่อจำลองการยกเลิกเอง
+
+</DocPage>
